@@ -1,0 +1,31 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+  pre_build:
+    commands:
+      - pip install awscli --upgrade --user
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+      - REPOSITORY_URI=939535946073.dkr.ecr.us-east-2.amazonaws.com/wellspring-ws-php-stg-service:latest
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+  build:
+    commands:
+      - nohup /usr/local/bin/dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 --storage-driver=overlay&
+      - echo $REPOSITORY_URI
+      - echo $IMAGE_TAG
+      # - aws s3 cp s3://linkme-notification-service-us-east-1-codepipeline/.env .
+      - docker build --rm -f Dockerfile -t skings-organization-service:v1 .
+      - docker tag skings-organization-service:v1  $REPOSITORY_URI:$IMAGE_TAG
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Writing image definitions file...
+      - printf '{"ImageURI":"%s"}' $REPOSITORY_URI:$IMAGE_TAG > imageDetail.json
+      - cat imageDetail.json
+artifacts:
+  files:
+    - imageDetail.json
